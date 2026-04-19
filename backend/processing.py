@@ -22,14 +22,19 @@ def load_model(encoder='vits'):
     model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
     return model.to(DEVICE).eval()
 
+model = load_model()
+
 def estimate_depth(model, image):
     return model.infer_image(image)
 
 def downsample_depth(depth, scale=0.25):
     return cv2.resize(depth, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
-def smooth_depth(depth, strength=5):
-    return cv2.GaussianBlur(depth, (strength, strength), 0)
+# def smooth_depth(depth, strength=5):
+#     return cv2.GaussianBlur(depth, (strength, strength), 0)
+
+def filter_noise(depth, strength=5):
+    return cv2.medianBlur(depth.astype(np.float32), strength)
 
 def normalize_depth(depth):
     return (depth - depth.min()) / depth.max()
@@ -112,12 +117,11 @@ def sample_vertex_colors(image, depth_shape):
             colors.append(f'rgb({r},{g},{b})')
     return colors
 
-def process_image(image, z_scale=1.0, smooth_strength=5, downsample_scale=0.25):
-    model = load_model()
+def process_image(image, z_scale=1.0, filter_strength=5, downsample_scale=0.25):
     depth = estimate_depth(model, image)
     depth = downsample_depth(depth, scale=downsample_scale)
     vertex_colors = sample_vertex_colors(image, depth.shape)
-    depth = smooth_depth(depth, strength=smooth_strength)
+    depth = filter_noise(depth, strength=filter_strength)
     depth = normalize_depth(depth)
     depth = scale_height(depth, z_scale=z_scale)
     vertices, h, w = compute_vertices(depth)

@@ -16,19 +16,19 @@ def save_obj(filename, vertices, faces, normals=None):
             else:
                 f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
 
-def generate_surface(image, z_scale, smooth_strength, downsample_scale):
+def generate_surface(image, z_scale, filter_strength, downsample_scale):
     image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     vertices, faces, normals, vertex_colors = processing.process_image(
         image_bgr,
         z_scale=z_scale,
-        smooth_strength=int(smooth_strength),
+        filter_strength=int(filter_strength),
         downsample_scale=downsample_scale
     )
     return vertices, faces, normals, vertex_colors
 
-def export_mesh(image, z_scale, smooth_strength, downsample_scale):
+def export_mesh(image, z_scale, filter_strength, downsample_scale):
     vertices, faces, normals, vertex_colors = generate_surface(
-        image, z_scale, smooth_strength, downsample_scale
+        image, z_scale, filter_strength, downsample_scale
     )
     base_dir = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(base_dir, '..', 'outputs', 'mesh.obj')
