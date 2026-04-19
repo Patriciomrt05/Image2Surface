@@ -4,7 +4,6 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Image2Surface - 3D Surface Generator',
   description: 'Convert images to 3D surfaces with interactive editing',
-  generator: 'v0.app',
   icons: {
     icon: [
       {

@@ -32,7 +32,13 @@ def smooth_depth(depth, strength=5):
     return cv2.GaussianBlur(depth, (strength, strength), 0)
 
 def normalize_depth(depth):
-    return (depth - depth.min()) / depth.max()
+    depth_min = depth.min()
+    depth_max = depth.max()
+    
+    if depth_max == depth_min:
+        return np.zeros_like(depth)
+    
+    return (depth - depth_min) / (depth_max - depth_min)
 
 def scale_height(depth, z_scale=1.0):
     return depth * z_scale
@@ -65,6 +71,10 @@ def normalize_coordinate_space(vertices):
     max_vals = vertices.max(axis=0)
     ranges = max_vals - min_vals
     max_range = ranges.max()
+
+    # Prevent division by zero
+    if max_range == 0:
+        return vertices
 
     # Scale all axes by the same factor to preserve shape
     vertices = vertices / (max_range / 2)

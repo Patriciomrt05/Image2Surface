@@ -134,8 +134,7 @@ export default function Home() {
     setShowEditPanel((prev) => !prev)
   }, [])
 
-  const handleResetView = useCallback(() => {
-  }, [])
+  const handleResetView = useCallback(() => {}, [])
 
   if (screen === 'viewer') {
     return (

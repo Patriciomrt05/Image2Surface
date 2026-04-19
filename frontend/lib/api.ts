@@ -60,7 +60,6 @@ export async function uploadImage(file: File): Promise<ImageUploadResponse> {
       },
     })
 
-    // Transform backend response to frontend format
     if (response.data.status === 'success' && response.data.image) {
       return {
         success: true,
@@ -80,10 +79,7 @@ export async function uploadImage(file: File): Promise<ImageUploadResponse> {
  */
 export async function generateSurface(imageId: string): Promise<SurfaceResponse> {
   try {
-    // Cancel any previous request
     cancelPendingRequests()
-    
-    // Create new abort controller for this request
     activeMeshRequest = new AbortController()
     
     const response = await apiClient.post<any>(
@@ -96,14 +92,12 @@ export async function generateSurface(imageId: string): Promise<SurfaceResponse>
     if (response.data.status === 'success' && response.data.mesh) {
       const backendMesh = response.data.mesh
       
-      // Efficiently convert array-based vertices to object-based
       const vertices = backendMesh.vertices.map((v: number[]) => ({
         x: v[0],
         y: v[1],
         z: v[2],
       }))
       
-      // Efficiently convert array-based indices to object-based
       const faces = backendMesh.indices.map((indices: number[]) => ({
         indices: [indices[0], indices[1], indices[2]],
       }))
@@ -181,10 +175,7 @@ export async function applyEdit(
  */
 export async function resetSurface(imageId: string): Promise<ResetResponse> {
   try {
-    // Cancel any previous request
     cancelPendingRequests()
-    
-    // Create new abort controller for this request
     activeMeshRequest = new AbortController()
     
     const response = await apiClient.post<any>(

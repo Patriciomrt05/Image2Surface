@@ -129,7 +129,6 @@ export function EditControls({
             </Button>
           </div>
 
-          {/* Reset Button */}
           <Button
             onClick={onReset}
             size="sm"
@@ -139,7 +138,6 @@ export function EditControls({
             Reset
           </Button>
 
-          {/* Loading indicator */}
           {isEditing && (
             <div className="mt-2 flex items-center justify-center gap-2 text-xs text-neutral-400">
               <div className="size-3 animate-spin rounded-full border border-neutral-400 border-t-transparent" />
