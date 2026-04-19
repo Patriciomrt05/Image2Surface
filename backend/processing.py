@@ -2,6 +2,7 @@ import torch
 import cv2
 import numpy as np
 import sys
+import os
 sys.path.append('depth_anything_v2')
 from depth_anything_v2.dpt import DepthAnythingV2
 
@@ -15,8 +16,10 @@ model_configs = {
 }
 
 def load_model(encoder='vits'):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    checkpoint_path = os.path.join(base_dir, 'checkpoints', f'depth_anything_v2_{encoder}.pth')
     model = DepthAnythingV2(**model_configs[encoder])
-    model.load_state_dict(torch.load(f'checkpoints/depth_anything_v2_{encoder}.pth', map_location='cpu'))
+    model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
     return model.to(DEVICE).eval()
 
 def estimate_depth(model, image):
@@ -43,7 +46,7 @@ def compute_vertices(depth):
             vertices.append([x, y, z])
     return np.array(vertices, dtype=np.float32), h, w
 
-def threejs_alignment(vertices):
+def flip_y_axis(vertices):
     vertices = vertices.copy()
     vertices[:, 1] *= -1
     return vertices
@@ -97,32 +100,30 @@ def compute_normals(vertices, faces):
     vertex_normals /= lengths
     return vertex_normals
 
-def save_obj(filename, vertices, faces, normals=None):
-    with open(filename, 'w') as f:
-        for v in vertices:
-            f.write(f"v {v[0]} {v[1]} {v[2]}\n")
+def sample_vertex_colors(image, depth_shape):
+    h, w = depth_shape
+    resized = cv2.resize(image, (w, h), interpolation=cv2.INTER_AREA)
+    resized_rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    
+    colors = []
+    for y in range(h):
+        for x in range(w):
+            r, g, b = resized_rgb[y, x]
+            colors.append(f'rgb({r},{g},{b})')
+    return colors
 
-        if normals is not None:
-            for n in normals:
-                f.write(f"vn {n[0]} {n[1]} {n[2]}\n")
-
-        for i, face in enumerate(faces):
-            if normals is not None:
-                f.write(f"f {face[0]+1}//{face[0]+1} {face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n")
-            else:
-                f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
-
-def run_pipeline(image, z_scale=1.0, smooth_strength=5, downsample_scale=0.25):
+def process_image(image, z_scale=1.0, smooth_strength=5, downsample_scale=0.25):
     model = load_model()
     depth = estimate_depth(model, image)
     depth = downsample_depth(depth, scale=downsample_scale)
+    vertex_colors = sample_vertex_colors(image, depth.shape)
     depth = smooth_depth(depth, strength=smooth_strength)
     depth = normalize_depth(depth)
     depth = scale_height(depth, z_scale=z_scale)
     vertices, h, w = compute_vertices(depth)
-    vertices = threejs_alignment(vertices)
+    vertices = flip_y_axis(vertices)
     vertices = center_mesh(vertices)
     vertices = normalize_coordinate_space(vertices)
     faces = compute_faces(h, w)
     normals = compute_normals(vertices, faces)
-    return vertices, faces, normals
+    return vertices, faces, normals, vertex_colors

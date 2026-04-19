@@ -4,6 +4,7 @@ __pycache__/
 
 # Mac
 .DS_Store
+**/.DS_Store
 
 # Model weights
 *.pth
@@ -12,3 +13,6 @@ backend/checkpoints/
 # Outputs
 outputs/
 *.obj
+
+# backup ui
+frontend/ui.py
