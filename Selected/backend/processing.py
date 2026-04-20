@@ -22,6 +22,8 @@ def load_model(encoder='vits'):
     model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
     return model.to(DEVICE).eval()
 
+model = load_model()
+
 def estimate_depth(model, image):
     return model.infer_image(image)
 
@@ -34,10 +36,8 @@ def smooth_depth(depth, strength=5):
 def normalize_depth(depth):
     depth_min = depth.min()
     depth_max = depth.max()
-    
     if depth_max == depth_min:
         return np.zeros_like(depth)
-    
     return (depth - depth_min) / (depth_max - depth_min)
 
 def scale_height(depth, z_scale=1.0):
@@ -66,19 +66,13 @@ def center_mesh(vertices):
     return vertices
 
 def normalize_coordinate_space(vertices):
-    # Find the largest range across all axes
-    min_vals = vertices.min(axis=0)
-    max_vals = vertices.max(axis=0)
-    ranges = max_vals - min_vals
-    max_range = ranges.max()
-
-    # Prevent division by zero
-    if max_range == 0:
-        return vertices
-
-    # Scale all axes by the same factor to preserve shape
-    vertices = vertices / (max_range / 2)
-
+    vertices = vertices.copy()
+    for i in range(3):
+        min_val = vertices[:, i].min()
+        max_val = vertices[:, i].max()
+        range_val = max_val - min_val
+        if range_val > 0:
+            vertices[:, i] = (vertices[:, i] - min_val) / range_val * 2 - 1
     return vertices
 
 def compute_faces(h, w):
@@ -114,7 +108,6 @@ def sample_vertex_colors(image, depth_shape):
     h, w = depth_shape
     resized = cv2.resize(image, (w, h), interpolation=cv2.INTER_AREA)
     resized_rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-    
     colors = []
     for y in range(h):
         for x in range(w):
@@ -123,7 +116,6 @@ def sample_vertex_colors(image, depth_shape):
     return colors
 
 def process_image(image, z_scale=1.0, smooth_strength=5, downsample_scale=0.25):
-    model = load_model()
     depth = estimate_depth(model, image)
     depth = downsample_depth(depth, scale=downsample_scale)
     vertex_colors = sample_vertex_colors(image, depth.shape)

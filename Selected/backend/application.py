@@ -1,37 +1,47 @@
 import cv2
 import os
+import numpy as np
 import processing
+import editing
+import storage
 
-def save_obj(filename, vertices, faces, normals=None):
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    with open(filename, 'w') as f:
-        for v in vertices:
-            f.write(f"v {v[0]} {v[1]} {v[2]}\n")
-        if normals is not None:
-            for n in normals:
-                f.write(f"vn {n[0]} {n[1]} {n[2]}\n")
-        for face in faces:
-            if normals is not None:
-                f.write(f"f {face[0]+1}//{face[0]+1} {face[1]+1}//{face[1]+1} {face[2]+1}//{face[2]+1}\n")
-            else:
-                f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
+uploaded_images = {}
 
-def generate_surface(image, z_scale, smooth_strength, downsample_scale):
-    image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+def generate_surface(image_id, image_path, z_scale, smooth_strength, downsample_scale):
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError("Could not read image")
     vertices, faces, normals, vertex_colors = processing.process_image(
-        image_bgr,
+        image,
         z_scale=z_scale,
         smooth_strength=int(smooth_strength),
         downsample_scale=downsample_scale
     )
     return vertices, faces, normals, vertex_colors
 
-def export_mesh(image, z_scale, smooth_strength, downsample_scale):
-    vertices, faces, normals, vertex_colors = generate_surface(
-        image, z_scale, smooth_strength, downsample_scale
+def export_mesh(image_id, z_scale, smooth_strength, downsample_scale, scale_strength=1.0, sharpen_strength=0.0):
+    if image_id not in uploaded_images:
+        raise ValueError("Image not found")
+
+    image_path = uploaded_images[image_id]["filepath"]
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError("Could not read image")
+
+    vertices, faces, normals, vertex_colors = processing.process_image(
+        image,
+        z_scale=z_scale,
+        smooth_strength=int(smooth_strength),
+        downsample_scale=downsample_scale
     )
+
+    if scale_strength != 1.0:
+        vertices = editing.scale_mesh(vertices, scale_strength)
+    if sharpen_strength != 0.0:
+        vertices = editing.sharpen_mesh(vertices, sharpen_strength)
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(base_dir, '..', 'outputs', 'mesh.obj')
     output_path = os.path.normpath(output_path)
-    save_obj(output_path, vertices, faces, normals)
+    storage.save_obj(output_path, vertices, faces, normals)
     return output_path

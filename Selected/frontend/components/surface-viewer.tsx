@@ -1,77 +1,97 @@
 'use client'
 
-import { useRef, useMemo, useEffect, useCallback, useState } from 'react'
+import { useRef, useMemo, useEffect, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { Button } from '@/components/ui/button'
 import { EditControls } from '@/components/edit-controls'
-import type { Mesh, EditOperation } from '@/lib/types'
+import type { Mesh } from '@/lib/types'
 
 interface SurfaceViewerProps {
   mesh: Mesh | null
-  isEditing: boolean
+  isExporting: boolean
   showEditPanel: boolean
+  imageId: string | null
   onToggleEditPanel: () => void
-  onApplyEdit: (operation: EditOperation, intensity: number) => void
-  onReset: () => void
+  onExport: (scaleStrength: number, smoothIntensity: number, sharpenIntensity: number) => void
   onResetView: () => void
   onBack: () => void
 }
 
 function CameraController({ resetTrigger }: { resetTrigger: number }) {
   const { camera } = useThree()
-  
   useEffect(() => {
     if (resetTrigger > 0) {
       camera.position.set(0, 2, 5)
       camera.lookAt(0, 0, 0)
     }
   }, [resetTrigger, camera])
-  
   return null
 }
 
-function SurfaceMesh({ mesh }: { mesh: Mesh }) {
+interface SurfaceMeshProps {
+  mesh: Mesh
+  heightScale: number
+  smoothIntensity: number
+  sharpenIntensity: number
+  useImageColors: boolean
+}
+
+function SurfaceMesh({ mesh, heightScale, smoothIntensity, sharpenIntensity, useImageColors }: SurfaceMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   const materialRef = useRef<THREE.MeshStandardMaterial | null>(null)
   const previousGeometryRef = useRef<THREE.BufferGeometry | null>(null)
 
   const material = useMemo(() => {
-    if (materialRef.current) {
-      materialRef.current.dispose()
-    }
+    if (materialRef.current) materialRef.current.dispose()
     const mat = new THREE.MeshStandardMaterial({
-      color: '#8888aa',
+      vertexColors: useImageColors && !!mesh.vertexColors,
       side: THREE.DoubleSide,
       flatShading: false,
+      // roughness: 0.5,
+      // metalness: 0.1,
     })
+    if (!useImageColors || !mesh.vertexColors) {
+      mat.color = new THREE.Color('#8888aa')
+    }
     materialRef.current = mat
     return mat
-  }, [])
+  }, [useImageColors, mesh.vertexColors])
 
   useEffect(() => {
     return () => {
-      if (previousGeometryRef.current) {
-        previousGeometryRef.current.dispose()
-      }
-      if (materialRef.current) {
-        materialRef.current.dispose()
-      }
+      if (previousGeometryRef.current) previousGeometryRef.current.dispose()
+      if (materialRef.current) materialRef.current.dispose()
     }
   }, [])
 
   const geometry = useMemo(() => {
-    if (previousGeometryRef.current) {
-      previousGeometryRef.current.dispose()
-    }
+    if (previousGeometryRef.current) previousGeometryRef.current.dispose()
 
     const geo = new THREE.BufferGeometry()
     const positions = new Float32Array(mesh.vertices.length * 3)
+
+    const zValues = mesh.vertices.map(v => v.z)
+    const zMean = zValues.reduce((a, b) => a + b, 0) / zValues.length
+    const zStd = Math.sqrt(zValues.reduce((a, b) => a + Math.pow(b - zMean, 2), 0) / zValues.length)
+
     mesh.vertices.forEach((vertex, i) => {
       positions[i * 3] = vertex.x
       positions[i * 3 + 1] = vertex.y
-      positions[i * 3 + 2] = vertex.z * 10
+
+      let z = vertex.z
+
+      if (smoothIntensity > 0 && zStd > 0) {
+        z = zMean + (z - zMean) * (1 - smoothIntensity)
+      }
+      if (sharpenIntensity > 0 && zStd > 0) {
+        const smoothedZ = zMean + (z - zMean) * 0.5
+        z = z + (z - smoothedZ) * sharpenIntensity
+      }
+      z = z * heightScale
+
+      positions[i * 3 + 2] = z
     })
 
     const indices = new Uint32Array(mesh.faces.length * 3)
@@ -83,27 +103,27 @@ function SurfaceMesh({ mesh }: { mesh: Mesh }) {
 
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geo.setIndex(new THREE.BufferAttribute(indices, 1))
+
+    // Add vertex colors if available and enabled
+    if (useImageColors && mesh.vertexColors) {
+      const colors = new Float32Array(mesh.vertices.length * 3)
+      mesh.vertexColors.forEach((colorStr, i) => {
+        const match = colorStr.match(/rgb\((\d+),(\d+),(\d+)\)/)
+        if (match) {
+          colors[i * 3] = parseInt(match[1]) / 255
+          colors[i * 3 + 1] = parseInt(match[2]) / 255
+          colors[i * 3 + 2] = parseInt(match[3]) / 255
+        }
+      })
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    }
+
     geo.computeVertexNormals()
-    geo.computeBoundingBox()
-    if (geo.boundingBox) {
-      const center = new THREE.Vector3()
-      geo.boundingBox.getCenter(center)
-      geo.translate(-center.x, -center.y, -center.z)
-    }
-
-    geo.computeBoundingSphere()
-    if (geo.boundingSphere) {
-      const scale = 2 / geo.boundingSphere.radius
-      geo.scale(scale, scale, scale)
-    }
-
     previousGeometryRef.current = geo
     return geo
-  }, [mesh])
+  }, [mesh, heightScale, smoothIntensity, sharpenIntensity, useImageColors])
 
-  return (
-    <mesh ref={meshRef} geometry={geometry} material={material} />
-  )
+  return <mesh ref={meshRef} geometry={geometry} material={material} />
 }
 
 function PlaceholderMesh() {
@@ -117,20 +137,40 @@ function PlaceholderMesh() {
 
 export function SurfaceViewer({
   mesh,
-  isEditing,
+  isExporting,
   showEditPanel,
+  imageId,
   onToggleEditPanel,
-  onApplyEdit,
-  onReset,
+  onExport,
   onResetView,
   onBack,
 }: SurfaceViewerProps) {
+  const [mounted, setMounted] = useState(false)
   const [resetTrigger, setResetTrigger] = useState(0)
+  const [heightScale, setHeightScale] = useState(1.0)
+  const [smoothIntensity, setSmoothIntensity] = useState(0.0)
+  const [sharpenIntensity, setSharpenIntensity] = useState(0.0)
+  const [useImageColors, setUseImageColors] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   const handleResetView = () => {
     setResetTrigger((prev) => prev + 1)
     onResetView()
   }
+
+  const handleReset = () => {
+    setHeightScale(1.0)
+    setSmoothIntensity(0.0)
+    setSharpenIntensity(0.0)
+    setUseImageColors(false)
+  }
+
+  const handleExport = () => {
+    onExport(heightScale, smoothIntensity, sharpenIntensity)
+  }
+
+  if (!mounted) return null
 
   return (
     <div className="relative flex min-h-screen flex-col items-center bg-[#c8c8c8] px-2 py-2">
@@ -141,34 +181,46 @@ export function SurfaceViewer({
       <div className="relative w-full flex-1">
         <EditControls
           isOpen={showEditPanel}
-          isEditing={isEditing}
+          isExporting={isExporting}
+          useImageColors={useImageColors}
           onToggle={onToggleEditPanel}
-          onApplyEdit={onApplyEdit}
-          onReset={onReset}
+          onReset={handleReset}
+          onExport={handleExport}
+          onToggleImageColors={() => setUseImageColors(prev => !prev)}
+          heightScale={heightScale}
+          smoothIntensity={smoothIntensity}
+          sharpenIntensity={sharpenIntensity}
+          onHeightScaleChange={setHeightScale}
+          onSmoothIntensityChange={setSmoothIntensity}
+          onSharpenIntensityChange={setSharpenIntensity}
         />
 
         <div className="h-[calc(100vh-180px)] w-full overflow-hidden rounded-lg bg-[#1a1a1a]">
           <Canvas
             camera={{ position: [0, 2, 5], fov: 50 }}
-            gl={{ 
+            gl={{
               antialias: true,
               powerPreference: 'high-performance',
               preserveDrawingBuffer: false,
               stencil: false,
               depth: true,
             }}
-            onCreated={(state) => {
-              state.gl.capabilities.logarithmicDepthBuffer = false
-            }}
           >
             <CameraController resetTrigger={resetTrigger} />
-            
             <ambientLight intensity={0.4} />
             <directionalLight position={[5, 5, 5]} intensity={0.8} />
             <directionalLight position={[-5, 3, -5]} intensity={0.4} />
-            
-            {mesh ? <SurfaceMesh mesh={mesh} /> : <PlaceholderMesh />}
-            
+            {mesh ? (
+              <SurfaceMesh
+                mesh={mesh}
+                heightScale={heightScale}
+                smoothIntensity={smoothIntensity}
+                sharpenIntensity={sharpenIntensity}
+                useImageColors={useImageColors}
+              />
+            ) : (
+              <PlaceholderMesh />
+            )}
             <OrbitControls
               enablePan={true}
               enableZoom={true}
@@ -199,15 +251,6 @@ export function SurfaceViewer({
           Back
         </Button>
       </div>
-
-      {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="flex flex-col items-center rounded-lg bg-neutral-800 px-8 py-6 text-white">
-            <div className="mb-3 size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            <span>Applying edit...</span>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

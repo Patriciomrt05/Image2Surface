@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
 import { Upload, ImageIcon } from 'lucide-react'
 
 interface ImageUploadProps {
@@ -10,8 +11,14 @@ interface ImageUploadProps {
   isUploading: boolean
   isGenerating: boolean
   error: string | null
+  resolution: number
+  smoothStrength: number
+  zScale: number
   onFileSelect: (file: File) => void
   onGenerate: () => void
+  onResolutionChange: (value: number) => void
+  onSmoothStrengthChange: (value: number) => void
+  onZScaleChange: (value: number) => void
 }
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg']
@@ -23,66 +30,42 @@ export function ImageUpload({
   isUploading,
   isGenerating,
   error,
+  resolution,
+  smoothStrength,
+  zScale,
   onFileSelect,
   onGenerate,
+  onResolutionChange,
+  onSmoothStrengthChange,
+  onZScaleChange,
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const validateFile = useCallback((file: File): string | null => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return 'Invalid file type. Please upload a PNG or JPG image.'
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return 'File too large. Maximum size is 5MB.'
-    }
+    if (!ALLOWED_TYPES.includes(file.type)) return 'Invalid file type. Please upload a PNG or JPG image.'
+    if (file.size > MAX_FILE_SIZE) return 'File too large. Maximum size is 5MB.'
     return null
   }, [])
 
-  const handleFileChange = useCallback(
-    (file: File | null) => {
-      if (!file) return
-
-      const error = validateFile(file)
-      if (error) {
-        setValidationError(error)
-        return
-      }
-
-      setValidationError(null)
-      onFileSelect(file)
-    },
-    [validateFile, onFileSelect]
-  )
+  const handleFileChange = useCallback((file: File | null) => {
+    if (!file) return
+    const error = validateFile(file)
+    if (error) { setValidationError(error); return }
+    setValidationError(null)
+    onFileSelect(file)
+  }, [validateFile, onFileSelect])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null
-    handleFileChange(file)
+    handleFileChange(e.target.files?.[0] || null)
   }
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setDragOver(false)
-      const file = e.dataTransfer.files?.[0] || null
-      handleFileChange(file)
-    },
-    [handleFileChange]
-  )
-
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    setDragOver(true)
-  }
-
-  const handleDragLeave = () => {
     setDragOver(false)
-  }
-
-  const handleChooseClick = () => {
-    fileInputRef.current?.click()
-  }
+    handleFileChange(e.dataTransfer.files?.[0] || null)
+  }, [handleFileChange])
 
   const displayError = validationError || error
   const canGenerate = selectedFile && !isUploading && !isGenerating
@@ -95,7 +78,7 @@ export function ImageUpload({
       </h1>
 
       <Button
-        onClick={handleChooseClick}
+        onClick={() => fileInputRef.current?.click()}
         disabled={isLoading}
         className="mb-2 bg-[#e8945a] px-6 py-2 text-sm font-medium text-white hover:bg-[#d88550]"
       >
@@ -113,43 +96,66 @@ export function ImageUpload({
 
       <div
         onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={`relative mb-2 flex h-[calc(100vh-200px)] w-full items-center justify-center overflow-hidden rounded-lg bg-[#1a1a1a] transition-all ${
-          dragOver ? 'ring-2 ring-[#e8945a]' : ''
-        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        className={`relative mb-2 flex h-[calc(100vh-380px)] w-full items-center justify-center overflow-hidden rounded-lg bg-[#1a1a1a] transition-all ${dragOver ? 'ring-2 ring-[#e8945a]' : ''}`}
       >
         {previewUrl ? (
-          <img
-            src={previewUrl}
-            alt="Preview"
-            className="max-h-full max-w-full object-contain"
-          />
+          <img src={previewUrl} alt="Preview" className="max-h-full max-w-full object-contain" />
         ) : (
           <div className="flex flex-col items-center text-neutral-300">
             <ImageIcon className="mb-2 size-12 opacity-100" />
             <span className="text-base font-medium">Image Preview</span>
-            <span className="mt-1 text-sm opacity-100">
-              Drag & drop or click above
-            </span>
+            <span className="mt-1 text-sm opacity-100">Drag & drop or click above</span>
           </div>
         )}
-
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60">
             <div className="flex flex-col items-center text-white">
               <div className="mb-2 size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              <span className="text-sm">
-                {isUploading ? 'Uploading...' : 'Generating Surface...'}
-              </span>
+              <span className="text-sm">{isUploading ? 'Uploading...' : 'Generating Surface...'}</span>
             </div>
           </div>
         )}
       </div>
 
-      {displayError && (
-        <p className="mb-2 text-sm text-red-600">{displayError}</p>
-      )}
+      {displayError && <p className="mb-2 text-sm text-red-600">{displayError}</p>}
+
+      <div className="mb-2 w-full max-w-xs">
+        <label className="mb-1 block text-sm text-neutral-700">
+          Resolution: {Math.round(resolution * 100)}%
+        </label>
+        <Slider
+          value={[resolution * 100]}
+          onValueChange={(v) => onResolutionChange(v[0] / 100)}
+          min={10} max={100} step={5} disabled={isLoading}
+          className="[&_[data-slot=slider-range]]:bg-[#e8945a] [&_[data-slot=slider-thumb]]:border-[#e8945a]"
+        />
+      </div>
+
+      <div className="mb-2 w-full max-w-xs">
+        <label className="mb-1 block text-sm text-neutral-700">
+          Depth Smoothing: {smoothStrength}
+        </label>
+        <Slider
+          value={[smoothStrength]}
+          onValueChange={(v) => onSmoothStrengthChange(v[0])}
+          min={1} max={21} step={2} disabled={isLoading}
+          className="[&_[data-slot=slider-range]]:bg-[#e8945a] [&_[data-slot=slider-thumb]]:border-[#e8945a]"
+        />
+      </div>
+
+      <div className="mb-3 w-full max-w-xs">
+        <label className="mb-1 block text-sm text-neutral-700">
+          Depth Scale: {zScale.toFixed(1)}x
+        </label>
+        <Slider
+          value={[zScale * 10]}
+          onValueChange={(v) => onZScaleChange(v[0] / 10)}
+          min={1} max={50} step={1} disabled={isLoading}
+          className="[&_[data-slot=slider-range]]:bg-[#e8945a] [&_[data-slot=slider-thumb]]:border-[#e8945a]"
+        />
+      </div>
 
       <Button
         onClick={onGenerate}

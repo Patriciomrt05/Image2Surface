@@ -23,6 +23,7 @@ export interface Face {
 export interface Mesh {
   vertices: Vertex[]
   faces: Face[]
+  vertexColors?: string[] | null  // ← only addition
 }
 
 export interface SurfaceResponse {
@@ -70,6 +71,7 @@ export type LoadingState =
   | 'generating'
   | 'editing'
   | 'resetting'
+  | 'exporting'  // ← only addition
 
 export interface AppState {
   screen: AppScreen

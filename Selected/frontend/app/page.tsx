@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { ImageUpload } from '@/components/image-upload'
 import { SurfaceViewer } from '@/components/surface-viewer'
 import * as api from '@/lib/api'
-import type { AppScreen, LoadingState, Mesh, EditOperation } from '@/lib/types'
+import type { AppScreen, LoadingState, Mesh } from '@/lib/types'
 
 export default function Home() {
   const [screen, setScreen] = useState<AppScreen>('upload')
@@ -15,27 +15,22 @@ export default function Home() {
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [showEditPanel, setShowEditPanel] = useState(false)
+  const [resolution, setResolution] = useState(0.25)
+  const [smoothStrength, setSmoothStrength] = useState(5)
+  const [zScale, setZScale] = useState(1.0)
 
   useEffect(() => {
     return () => {
       api.cancelPendingRequests()
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl)
-      }
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
 
   const handleFileSelect = useCallback(async (file: File) => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-    }
-
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
     setSelectedFile(file)
     setError(null)
-
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-
+    setPreviewUrl(URL.createObjectURL(file))
     setLoadingState('uploading')
     try {
       const response = await api.uploadImage(file)
@@ -53,16 +48,11 @@ export default function Home() {
   }, [previewUrl])
 
   const handleGenerate = useCallback(async () => {
-    if (!imageId) {
-      setError('No image uploaded')
-      return
-    }
-
+    if (!imageId) { setError('No image uploaded'); return }
     setLoadingState('generating')
     setError(null)
-
     try {
-      const response = await api.generateSurface(imageId)
+      const response = await api.generateSurface(imageId, resolution, smoothStrength, zScale)
       if (response.success && response.mesh) {
         setCurrentMesh(response.mesh)
         setScreen('viewer')
@@ -75,53 +65,32 @@ export default function Home() {
     } finally {
       setLoadingState('idle')
     }
-  }, [imageId])
+  }, [imageId, resolution, smoothStrength, zScale])
 
-  const handleApplyEdit = useCallback(async (operation: EditOperation, intensity: number) => {
-    if (!imageId) {
-      setError('No image loaded for editing')
-      return
-    }
-
-    setLoadingState('editing')
+  const handleExport = useCallback(async (
+    scaleStrength: number,
+    smoothIntensity: number,
+    sharpenIntensity: number
+  ) => {
+    if (!imageId) { setError('No image loaded'); return }
+    setLoadingState('exporting')
     setError(null)
-
     try {
-      const response = await api.applyEdit(imageId, operation, intensity)
-      if (response.success && response.mesh) {
-        setCurrentMesh(response.mesh)
-      } else {
-        throw new Error(response.message || 'Failed to apply edit')
-      }
+      const response = await api.exportMesh(
+        imageId,
+        zScale,
+        smoothStrength,
+        resolution,
+        scaleStrength,
+        sharpenIntensity
+      )
+      if (!response.success) throw new Error(response.message || 'Export failed')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply edit')
+      setError(err instanceof Error ? err.message : 'Failed to export mesh')
     } finally {
       setLoadingState('idle')
     }
-  }, [imageId])
-
-  const handleReset = useCallback(async () => {
-    if (!imageId) {
-      setError('No image loaded for reset')
-      return
-    }
-
-    setLoadingState('resetting')
-    setError(null)
-
-    try {
-      const response = await api.resetSurface(imageId)
-      if (response.success && response.mesh) {
-        setCurrentMesh(response.mesh)
-      } else {
-        throw new Error(response.message || 'Failed to reset surface')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset surface')
-    } finally {
-      setLoadingState('idle')
-    }
-  }, [imageId])
+  }, [imageId, resolution, smoothStrength, zScale])
 
   const handleBack = useCallback(() => {
     setScreen('upload')
@@ -133,18 +102,16 @@ export default function Home() {
     setShowEditPanel((prev) => !prev)
   }, [])
 
-  const handleResetView = useCallback(() => {}, [])
-
   if (screen === 'viewer') {
     return (
       <SurfaceViewer
         mesh={currentMesh}
-        isEditing={loadingState === 'editing' || loadingState === 'resetting'}
+        isExporting={loadingState === 'exporting'}
         showEditPanel={showEditPanel}
+        imageId={imageId}
         onToggleEditPanel={handleToggleEditPanel}
-        onApplyEdit={handleApplyEdit}
-        onReset={handleReset}
-        onResetView={handleResetView}
+        onExport={handleExport}
+        onResetView={() => {}}
         onBack={handleBack}
       />
     )
@@ -157,8 +124,14 @@ export default function Home() {
       isUploading={loadingState === 'uploading'}
       isGenerating={loadingState === 'generating'}
       error={error}
+      resolution={resolution}
+      smoothStrength={smoothStrength}
+      zScale={zScale}
       onFileSelect={handleFileSelect}
       onGenerate={handleGenerate}
+      onResolutionChange={setResolution}
+      onSmoothStrengthChange={setSmoothStrength}
+      onZScaleChange={setZScale}
     />
   )
 }
