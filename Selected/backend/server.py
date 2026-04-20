@@ -5,6 +5,7 @@ from typing import Optional
 import cv2
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import logging
 
@@ -56,11 +57,6 @@ class ExportRequest(BaseModel):
     downsample_scale: float = 0.25
     scale_strength: float = 1.0
     sharpen_strength: float = 0.0
-
-class ExportResponse(BaseModel):
-    status: str
-    filepath: Optional[str] = None
-    message: Optional[str] = None
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
@@ -129,7 +125,7 @@ async def generate_surface(
             "mesh": {
                 "vertices": vertices.tolist(),
                 "indices": faces.tolist(),
-                "vertex_colors": vertex_colors  # ← add this
+                "vertex_colors": vertex_colors
             },
             "message": "Surface generated successfully"
         }
@@ -137,7 +133,7 @@ async def generate_surface(
         logger.error(f"Error generating surface: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
-@app.post("/api/surface/export", response_model=ExportResponse)
+@app.post("/api/surface/export")
 async def export_surface(request: ExportRequest):
     try:
         filepath = application.export_mesh(
@@ -148,11 +144,11 @@ async def export_surface(request: ExportRequest):
             request.scale_strength,
             request.sharpen_strength
         )
-        return {
-            "status": "success",
-            "filepath": filepath,
-            "message": "Mesh exported successfully"
-        }
+        return FileResponse(
+            path=filepath,
+            media_type="application/octet-stream",
+            filename="mesh.obj"
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

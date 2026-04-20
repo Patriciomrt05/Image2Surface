@@ -100,20 +100,29 @@ export async function exportMesh(
   downsampleScale: number,
   scaleStrength: number,
   sharpenStrength: number
-): Promise<{ success: boolean; filepath?: string; message?: string }> {
+): Promise<{ success: boolean; message?: string }> {
   try {
-    const response = await apiClient.post<any>('/surface/export', {
-      image_id: imageId,
-      z_scale: zScale,
-      smooth_strength: smoothStrength,
-      downsample_scale: downsampleScale,
-      scale_strength: scaleStrength,
-      sharpen_strength: sharpenStrength,
-    })
-    if (response.data.status === 'success') {
-      return { success: true, filepath: response.data.filepath, message: response.data.message }
-    }
-    throw new Error('Invalid response format')
+    const response = await apiClient.post(
+      '/surface/export',
+      {
+        image_id: imageId,
+        z_scale: zScale,
+        smooth_strength: smoothStrength,
+        downsample_scale: downsampleScale,
+        scale_strength: scaleStrength,
+        sharpen_strength: sharpenStrength,
+      },
+      { responseType: 'blob' }
+    )
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'mesh.obj')
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    return { success: true }
   } catch (error) {
     handleApiError(error)
   }
